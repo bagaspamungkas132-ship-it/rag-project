@@ -1,0 +1,229 @@
+"""
+RAG (Retrieval-Augmented Generation) pipeline untuk mengecek apakah
+jawaban dari suatu pertanyaan tersedia di dalam folder dokumen
+(PDF & Markdown).
+
+Cara pakai (dari terminal CML / Jupyter):
+    python rag.py build                    # membangun / memperbarui index
+    python rag.py ask "pertanyaan kamu"     # tanya sekali
+    python rag.py chat                      # mode tanya-jawab interaktif
+
+Sebelum dijalankan, set environment variable untuk API key:
+    export QWEN_API_KEY="isi_api_key_kamu"
+(di CML: Project Settings > Advanced > Environment Variables)
+"""
+
+import os
+import sys
+import argparse
+from pathlib import Path
+
+import yaml
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    DirectoryLoader,
+    UnstructuredMarkdownLoader,
+)
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+from openai import OpenAI
+
+
+def load_config(path="config.yaml"):
+    with open(path, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    def resolve(value):
+        if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            env_name = value[2:-1]
+            resolved = os.getenv(env_name)
+            if resolved is None:
+                raise EnvironmentError(
+                    f"Environment variable '{env_name}' belum di-set. "
+                    f"Jalankan: export {env_name}=<api_key_kamu>"
+                )
+            return resolved
+        return value
+
+    cfg["llm_config"]["api_key"] = resolve(cfg["llm_config"]["api_key"])
+    return cfg
+
+
+def load_documents_from_folder(folder_path):
+    """Load semua PDF & Markdown dari satu folder secara rekursif
+    (termasuk semua subfolder di dalamnya)."""
+    folder = Path(folder_path)
+    if not folder.exists():
+        print(f"[WARN] Folder tidak ditemukan, dilewati: {folder_path}")
+        return []
+
+    docs = []
+
+    pdf_loader = DirectoryLoader(str(folder), glob="**/*.pdf", loader_cls=PyPDFLoader)
+    try:
+        docs.extend(pdf_loader.load())
+    except Exception as e:
+        print(f"[WARN] Gagal memuat PDF dari {folder_path}: {e}")
+
+    md_loader = DirectoryLoader(
+        str(folder), glob="**/*.md", loader_cls=UnstructuredMarkdownLoader
+    )
+    try:
+        docs.extend(md_loader.load())
+    except Exception as e:
+        print(f"[WARN] Gagal memuat Markdown dari {folder_path}: {e}")
+
+    return docs
+
+
+def load_documents(folder_paths):
+    """Load dokumen dari satu atau beberapa folder sumber.
+    Menandai tiap dokumen dengan nama folder sumbernya (knowledge_base)
+    supaya nanti bisa diketahui asalnya (misal product-knowledge / promo-knowledge)."""
+    if isinstance(folder_paths, str):
+        folder_paths = [folder_paths]
+
+    all_docs = []
+    for folder_path in folder_paths:
+        docs = load_documents_from_folder(folder_path)
+        knowledge_base_name = Path(folder_path).name
+        for d in docs:
+            d.metadata["knowledge_base"] = knowledge_base_name
+        print(f"  - {folder_path}: {len(docs)} dokumen")
+        all_docs.extend(docs)
+
+    if not all_docs:
+        print("[WARN] Tidak ada dokumen ditemukan di semua folder yang dicek.")
+    return all_docs
+
+
+def build_index(cfg):
+    folders = cfg["document_folders"]
+    print(f"Membaca dokumen dari {len(folders)} folder sumber:")
+    docs = load_documents(folders)
+    print(f"Total dokumen termuat: {len(docs)}")
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=cfg["chunking_config"]["chunk_size"],
+        chunk_overlap=cfg["chunking_config"]["chunk_overlap"],
+    )
+    chunks = splitter.split_documents(docs)
+    print(f"Jumlah chunk setelah split: {len(chunks)}")
+
+    embeddings = HuggingFaceEmbeddings(
+        model_name=cfg["embedding_config"]["model"],
+        model_kwargs={"device": cfg["embedding_config"].get("device", "cpu")},
+    )
+
+    vectordb = Chroma.from_documents(
+        chunks,
+        embeddings,
+        persist_directory=cfg["vectorstore_config"]["persist_directory"],
+        collection_name=cfg["vectorstore_config"]["collection_name"],
+    )
+    vectordb.persist()
+    print(f"Index tersimpan di: {cfg['vectorstore_config']['persist_directory']}")
+    return vectordb
+
+
+def load_index(cfg):
+    embeddings = HuggingFaceEmbeddings(
+        model_name=cfg["embedding_config"]["model"],
+        model_kwargs={"device": cfg["embedding_config"].get("device", "cpu")},
+    )
+    return Chroma(
+        persist_directory=cfg["vectorstore_config"]["persist_directory"],
+        embedding_function=embeddings,
+        collection_name=cfg["vectorstore_config"]["collection_name"],
+    )
+
+
+def ask_question(cfg, vectordb, question):
+    top_k = cfg["retrieval_config"]["top_k"]
+    results = vectordb.similarity_search(question, k=top_k)
+
+    if not results:
+        return "TIDAK DITEMUKAN dalam dokumen.", []
+
+    context = "\n\n---\n\n".join(
+        f"[Knowledge base: {r.metadata.get('knowledge_base', 'unknown')} | "
+        f"Sumber: {r.metadata.get('source', 'unknown')}]\n{r.page_content}"
+        for r in results
+    )
+
+    client = OpenAI(
+        base_url=cfg["llm_config"]["base_url"],
+        api_key=cfg["llm_config"]["api_key"],
+    )
+
+    prompt = f"""{cfg['system_prompt']}
+
+Konteks:
+{context}
+
+Pertanyaan: {question}
+
+Jawaban:"""
+
+    response = client.chat.completions.create(
+        model=cfg["llm_config"]["model"],
+        temperature=cfg["llm_config"]["temperature"],
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    answer = response.choices[0].message.content
+    sources = sorted(
+        set(
+            f"[{r.metadata.get('knowledge_base', 'unknown')}] {r.metadata.get('source', 'unknown')}"
+            for r in results
+        )
+    )
+    return answer, sources
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="RAG QA atas folder dokumen (PDF & Markdown)"
+    )
+    parser.add_argument("command", choices=["build", "ask", "chat"])
+    parser.add_argument("question", nargs="?", help="Pertanyaan (untuk command 'ask')")
+    parser.add_argument("--config", default="config.yaml", help="Path ke file config")
+    args = parser.parse_args()
+
+    cfg = load_config(args.config)
+
+    if args.command == "build":
+        build_index(cfg)
+
+    elif args.command == "ask":
+        if not args.question:
+            print('Gunakan: python rag.py ask "pertanyaan kamu"')
+            sys.exit(1)
+        vectordb = load_index(cfg)
+        answer, sources = ask_question(cfg, vectordb, args.question)
+        print("\n=== JAWABAN ===")
+        print(answer)
+        if sources:
+            print("\n=== SUMBER ===")
+            for s in sources:
+                print(f"- {s}")
+
+    elif args.command == "chat":
+        vectordb = load_index(cfg)
+        print("Mode chat aktif. Ketik 'exit' untuk keluar.\n")
+        while True:
+            question = input("Pertanyaan: ").strip()
+            if question.lower() in ("exit", "quit"):
+                break
+            if not question:
+                continue
+            answer, sources = ask_question(cfg, vectordb, question)
+            print(f"\nJawaban: {answer}")
+            if sources:
+                print(f"Sumber: {', '.join(sources)}")
+            print()
+
+
+if __name__ == "__main__":
+    main()

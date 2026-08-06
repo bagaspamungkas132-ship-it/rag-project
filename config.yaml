@@ -1,0 +1,33 @@
+llm_config:
+  model: "Qwen/Qwen3.5-35B-A3B"
+  temperature: 0.6
+  api_key: "${QWEN_API_KEY}"    # diambil dari environment variable, JANGAN hardcode di sini
+  base_url: "https://llmqwen14b.wssdx.apps.cml.ocbcnisp.com/v1"
+
+embedding_config:
+  model: "all-MiniLM-L6-v2"
+  device: "cpu"
+
+vectorstore_config:
+  persist_directory: "./chroma_db"
+  collection_name: "knowledge_base"
+
+chunking_config:
+  chunk_size: 800
+  chunk_overlap: 100
+
+retrieval_config:
+  top_k: 4
+
+# Bisa lebih dari satu folder sumber. Setiap folder akan di-scan rekursif
+# (semua subfolder di dalamnya, misal osg/pdf, osg/catalogue_list, rm-copilot/md_file)
+document_folders:
+  - "/home/cdsw/product-knowledge"
+  - "/home/cdsw/promo-knowledge"
+
+system_prompt: |
+  Kamu adalah asisten yang HANYA menjawab berdasarkan konteks yang diberikan di bawah ini.
+  Jika jawaban tidak ditemukan secara jelas di dalam konteks, jawab dengan tegas:
+  "TIDAK DITEMUKAN dalam dokumen."
+  Jangan mengarang informasi atau menggunakan pengetahuan di luar konteks yang diberikan.
+  Sertakan kutipan singkat dari konteks yang mendukung jawabanmu jika memungkinkan.
