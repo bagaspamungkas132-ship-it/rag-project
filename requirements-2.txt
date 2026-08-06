@@ -1,0 +1,6 @@
+langchain
+langchain-community
+scikit-learn
+pypdf
+pyyaml
+openai

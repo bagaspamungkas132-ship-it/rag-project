@@ -1,0 +1,31 @@
+llm_config:
+  model: "Qwen/Qwen3.5-35B-A3B"
+  temperature: 0.6   # tidak dipakai untuk verifikasi (selalu 0), hanya cadangan kalau dipakai fitur lain nanti
+  api_key: "${QWEN_API_KEY}"    # diambil dari environment variable, JANGAN hardcode di sini
+  base_url: "https://llmqwen14b.wssdx.apps.cml.ocbcnisp.com/v1"
+
+vectorstore_config:
+  persist_directory: "./tfidf_index"
+
+chunking_config:
+  chunk_size: 800
+  chunk_overlap: 100
+
+retrieval_config:
+  # Jumlah kandidat chunk awal dari TF-IDF (per variasi query) yang akan
+  # diverifikasi ke LLM. Makin besar, makin luas pencarian (recall lebih
+  # baik), tapi makin banyak panggilan LLM (lebih lambat, bukan lebih
+  # berat secara memori).
+  candidate_top_k: 15
+
+  # Jumlah variasi kalimat pertanyaan (dengan maksud sama, istilah beda)
+  # yang dibuat LLM untuk memperluas pencarian TF-IDF. 0 = matikan fitur
+  # ini (hanya cari pakai pertanyaan asli).
+  paraphrase_count: 3
+
+# 3 folder sumber sesuai struktur project kamu. Di-scan rekursif
+# (semua subfolder di dalamnya juga ikut, bukan cuma level atas).
+document_folders:
+  - "/home/cdsw/product-knowledge/osg/pdf"
+  - "/home/cdsw/product-knowledge/rm-copilot"
+  - "/home/cdsw/promo-knowledge/osg/md_file"
