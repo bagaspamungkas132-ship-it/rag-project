@@ -5,3 +5,14 @@ with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
 print('Punya embeddings:', 'embeddings' in idx and idx['embeddings'] is not None)
 print('Total chunk:', len(idx['chunk_texts']))
 "
+
+from openai import OpenAI
+import os
+
+client = OpenAI(
+    base_url="<base_url dari config.yaml kamu>",
+    api_key=os.getenv("QWEN_API_KEY")
+)
+models = client.models.list()
+for m in models.data:
+    print(m.id)
