@@ -78,3 +78,43 @@ for rank, idx in enumerate(ranked, 1):
         print("-" * 60)
 PYEOF
 python3 debug_search2.py
+cat > debug_search3.py << 'PYEOF'
+import pickle
+from sklearn.metrics.pairwise import cosine_similarity
+
+with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
+    data = pickle.load(f)
+
+vectorizer = data['vectorizer']
+tfidf_matrix = data['tfidf_matrix']
+chunk_metadatas = data['chunk_metadatas']
+chunk_texts = data['chunk_texts']
+
+print(f"Total chunk di index: {len(chunk_texts)}")
+
+query = "Berapa minimum saldo penempatan deposito idr menggunakan OCBC Mobile? online digital"
+q_vec = vectorizer.transform([query])
+scores = cosine_similarity(q_vec, tfidf_matrix)[0]
+
+ranked = scores.argsort()[::-1]
+
+target_keyword = "deposito_idr_online"
+
+with open("hasil_debug.txt", "w") as out:
+    out.write(f"Total chunk di index: {len(chunk_texts)}\n\n")
+    found = 0
+    for rank, idx in enumerate(ranked, 1):
+        source = chunk_metadatas[idx]['source']
+        if target_keyword in source.lower():
+            found += 1
+            out.write(f"Rank {rank} dari {len(chunk_texts)} | skor={scores[idx]:.4f} | {source}\n")
+            out.write(f"Isi chunk:\n{chunk_texts[idx][:600]}\n")
+            out.write("-" * 60 + "\n\n")
+            if found >= 5:
+                break
+    if found == 0:
+        out.write("TIDAK ADA chunk yang path-nya mengandung 'deposito_idr_online' sama sekali.\n")
+
+print("Selesai, hasil disimpan di hasil_debug.txt")
+PYEOF
+python3 debug_search3.py
