@@ -1,0 +1,7 @@
+python3 -c "
+import pickle
+with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
+    idx = pickle.load(f)
+print('Punya embeddings:', 'embeddings' in idx and idx['embeddings'] is not None)
+print('Total chunk:', len(idx['chunk_texts']))
+"
