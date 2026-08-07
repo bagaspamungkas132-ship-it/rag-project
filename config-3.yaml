@@ -1,0 +1,64 @@
+llm_config:
+  model: "Qwen/Qwen3.5-35B-A3B"
+  temperature: 0.6   # tidak dipakai untuk verifikasi (selalu 0), hanya cadangan kalau dipakai fitur lain nanti
+  api_key: "${QWEN_API_KEY}"    # diambil dari environment variable, JANGAN hardcode di sini
+  base_url: "https://llmqwen14b.wssdx.apps.cml.ocbcnisp.com/v1"
+
+vectorstore_config:
+  persist_directory: "./tfidf_index"
+
+# Opsional: LLM merapikan SUSUNAN teks hasil ekstraksi PDF (pdfplumber)
+# jadi Markdown yang lebih rapi. DIKUNCI ke token eksak (angka, %, kode
+# promo) via verify_locked_tokens() di rag.py — kalau LLM sampai
+# mengubah satu angka pun, hasilnya OTOMATIS DIBUANG dan fallback ke
+# ekstraksi deterministik. Default mati karena ekstraksi deterministik
+# (pdfplumber table-aware) sudah cukup untuk kebanyakan kasus; nyalakan
+# kalau masih ada PDF dengan struktur teks berantakan yang tidak
+# terdeteksi sebagai tabel oleh pdfplumber.
+pdf_reading_config:
+  use_llm_reformat: false
+
+chunking_config:
+  chunk_size: 800
+  chunk_overlap: 100
+
+retrieval_config:
+  # Jumlah kandidat chunk awal dari TF-IDF (per variasi query) yang akan
+  # diverifikasi ke LLM. Makin besar, makin luas pencarian (recall lebih
+  # baik), tapi makin banyak panggilan LLM (lebih lambat, bukan lebih
+  # berat secara memori).
+  candidate_top_k: 15
+
+  # Jumlah variasi kalimat pertanyaan (dengan maksud sama, istilah beda)
+  # yang dibuat LLM untuk memperluas pencarian TF-IDF. 0 = matikan fitur
+  # ini (hanya cari pakai pertanyaan asli).
+  paraphrase_count: 3
+
+  # Model embedding semantik (dari package sentence-transformers, install
+  # via conda). Dipakai bareng TF-IDF (hybrid search) supaya pertanyaan
+  # yang istilahnya beda dari dokumen (contoh: "bertransaksi valas" vs
+  # dokumen yang pakai kata "Forex"/"Transfer") tetap bisa ketemu.
+  # Model ini multilingual, cocok untuk dokumen bahasa Indonesia.
+  embedding_model: "paraphrase-multilingual-MiniLM-L12-v2"
+
+  # Bobot gabungan skor TF-IDF vs embedding saat retrieval (0.0 - 1.0).
+  # 1.0 = TF-IDF murni (cocok kata literal, kuat untuk kode promo/angka
+  #       eksak seperti "NTB2607-IDR").
+  # 0.0 = embedding murni (cocok makna, kuat untuk pertanyaan yang
+  #       kata-katanya beda dari dokumen tapi maksudnya sama).
+  # 0.5 = seimbang (default, disarankan sebagai titik awal).
+  hybrid_alpha: 0.5
+
+  # Jumlah chunk (bukan cuma 1) yang diambil per file sebelum digabung
+  # jadi satu konteks untuk verifikasi & penyusunan jawaban. Naikkan
+  # kalau jawaban sering "kepotong" padahal info lengkapnya ada di file
+  # yang sama tapi tersebar di beberapa bagian. Makin besar, makin
+  # lengkap konteksnya, tapi prompt ke LLM makin panjang (lebih lambat).
+  chunks_per_file: 3
+
+# 3 folder sumber sesuai struktur project kamu. Di-scan rekursif
+# (semua subfolder di dalamnya juga ikut, bukan cuma level atas).
+document_folders:
+  - "/home/cdsw/product-knowledge/osg/pdf"
+  - "/home/cdsw/product-knowledge/rm-copilot"
+  - "/home/cdsw/promo-knowledge/osg/md_file"
