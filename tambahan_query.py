@@ -43,3 +43,11 @@ candidate_top_k = cfg["retrieval_config"].get("candidate_top_k", 15)
         variants = generate_query_variants(cfg, client, question, n=paraphrase_count)
         for variant in variants:
             all_results.extend(retrieve(index, variant, candidate_top_k))
+
+python3 -c "
+import pickle
+with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
+    data = pickle.load(f)
+matches = [m['source'] for m in data['chunk_metadatas'] if 'online' in m['source'].lower()]
+print(set(matches))
+"
