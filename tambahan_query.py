@@ -120,3 +120,5 @@ PYEOF
 python3 debug_search3.py
 
 python3 -c "import transformers, sentence_transformers; print('transformers:', transformers.__version__); print('sentence-transformers:', sentence_transformers.__version__)"
+
+conda install -c conda-forge "transformers>=4.30,<5" "sentence-transformers>=2.2" -y
