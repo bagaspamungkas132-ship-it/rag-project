@@ -51,3 +51,30 @@ with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
 matches = [m['source'] for m in data['chunk_metadatas'] if 'online' in m['source'].lower()]
 print(set(matches))
 "
+cat > debug_search2.py << 'PYEOF'
+import pickle
+from sklearn.metrics.pairwise import cosine_similarity
+
+with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
+    data = pickle.load(f)
+
+vectorizer = data['vectorizer']
+tfidf_matrix = data['tfidf_matrix']
+chunk_metadatas = data['chunk_metadatas']
+chunk_texts = data['chunk_texts']
+
+query = "Berapa minimum saldo penempatan deposito idr menggunakan OCBC Mobile? online digital"
+q_vec = vectorizer.transform([query])
+scores = cosine_similarity(q_vec, tfidf_matrix)[0]
+
+ranked = scores.argsort()[::-1]
+
+print("=== Rank untuk semua chunk dari file 'online_umum' (di mana pun posisinya) ===")
+for rank, idx in enumerate(ranked, 1):
+    source = chunk_metadatas[idx]['source']
+    if "online_umum" in source.lower() or "deposito_idr_online" in source.lower():
+        print(f"\nRank {rank} | skor={scores[idx]:.4f} | {source}")
+        print(f"Isi chunk:\n{chunk_texts[idx][:500]}")
+        print("-" * 60)
+PYEOF
+python3 debug_search2.py
