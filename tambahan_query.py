@@ -118,3 +118,5 @@ with open("hasil_debug.txt", "w") as out:
 print("Selesai, hasil disimpan di hasil_debug.txt")
 PYEOF
 python3 debug_search3.py
+
+python3 -c "import transformers, sentence_transformers; print('transformers:', transformers.__version__); print('sentence-transformers:', sentence_transformers.__version__)"
