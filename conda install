@@ -1,2 +1,13 @@
-pip install pymupdf
-python -c "import fitz; doc = fitz.open('/home/cdsw/skip_dulu/148_RIPLAY_OCBC_Merchant.pdf'); print(len(doc), 'halaman terbaca')"
+pip install pdfplumber
+python -c "
+import pdfplumber
+with pdfplumber.open('/home/cdsw/product-knowledge/osg/pdf/148_RIPLAY_OCBC_Merchant.pdf') as pdf:
+    page = pdf.pages[0]
+    print('=== TEKS BIASA ===')
+    print(page.extract_text())
+    print()
+    print('=== TABEL TERDETEKSI ===')
+    for table in page.extract_tables():
+        for row in table:
+            print(row)
+"
