@@ -1,1 +1,22 @@
-conda install --override-channels -c https://nexus.appsnp.ocbcnisp.com:8443/repository/repo_conda_proxy chromadb
+cat > ~/ai_test/rag-project/all-MiniLM-L6-v2/modules.json << 'EOF'
+[
+  {
+    "idx": 0,
+    "name": "0",
+    "path": "",
+    "type": "sentence_transformers.models.Transformer"
+  },
+  {
+    "idx": 1,
+    "name": "1",
+    "path": "1_Pooling",
+    "type": "sentence_transformers.models.Pooling"
+  },
+  {
+    "idx": 2,
+    "name": "2",
+    "path": "2_Normalize",
+    "type": "sentence_transformers.models.Normalize"
+  }
+]
+EOF
