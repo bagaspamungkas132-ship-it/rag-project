@@ -1,9 +1,1 @@
-cat > ~/ai_test/rag-project/all-MiniLM-L6-v2/1_Pooling/config.json << 'EOF'
-{
-  "word_embedding_dimension": 384,
-  "pooling_mode_cls_token": false,
-  "pooling_mode_mean_tokens": true,
-  "pooling_mode_max_tokens": false,
-  "pooling_mode_mean_sqrt_len_tokens": false
-}
-EOF
+sed -i 's/from pydantic import BaseSettings/from pydantic_settings import BaseSettings/' /home/cdsw/.conda/envs/ocbcsg/lib/python3.9/site-packages/chromadb/config.py
