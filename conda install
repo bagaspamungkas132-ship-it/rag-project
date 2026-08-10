@@ -1,1 +1,8 @@
-cp -r ~/ai_test/rag-project/all-MiniLM-L6-v2 /home/cdsw/qa_project/ocbc_smart_guide/models/
+import time
+import sys
+sys.path.append("src")  # sesuaikan kalau perlu
+from pdf_parser import extract_pdf_text
+
+start = time.time()
+text = extract_pdf_text("path/ke/salah_satu_file.pdf")
+print(f"Waktu parsing 1 file: {time.time()-start:.2f} detik")
