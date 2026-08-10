@@ -1,0 +1,1 @@
+conda install --override-channels -c https://nexus.appsnp.ocbcnisp.com:8443/repository/repo_conda_proxy chromadb
