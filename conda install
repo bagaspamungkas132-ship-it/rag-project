@@ -1,13 +1,1 @@
-pip install pdfplumber
-python -c "
-import pdfplumber
-with pdfplumber.open('/home/cdsw/product-knowledge/osg/pdf/148_RIPLAY_OCBC_Merchant.pdf') as pdf:
-    page = pdf.pages[0]
-    print('=== TEKS BIASA ===')
-    print(page.extract_text())
-    print()
-    print('=== TABEL TERDETEKSI ===')
-    for table in page.extract_tables():
-        for row in table:
-            print(row)
-"
+cp -r ~/ai_test/rag-project/all-MiniLM-L6-v2 /home/cdsw/qa_project/ocbc_smart_guide/models/
