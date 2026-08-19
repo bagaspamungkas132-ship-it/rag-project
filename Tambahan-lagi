@@ -1,55 +1,55 @@
-WITH base AS (
+WITH normalized AS (
   SELECT 
-    n.nasabah_id,
-    n.nama_nasabah,
+    n.customerid,
+    n.customername,
     s.dataid AS screening_id,
-    s.nama_screening,
-    concat_ws(' ', sort_array(split(lower(trim(n.nama_nasabah)), ' '))) AS nasabah_sorted,
-    concat_ws(' ', sort_array(split(lower(trim(s.nama_screening)), ' '))) AS screening_sorted,
-    split(lower(trim(n.nama_nasabah)), ' ') AS nasabah_tokens,
-    split(lower(trim(s.nama_screening)), ' ') AS screening_tokens
-  FROM nasabah n
-  CROSS JOIN screening_list s
+    s.name AS screening_name,
+    concat_ws(' ', sort_array(split(lower(trim(n.customername)), ' '))) AS nasabah_sorted,
+    concat_ws(' ', sort_array(split(lower(trim(s.name)), ' '))) AS screening_sorted,
+    split(lower(trim(n.customername)), ' ') AS nasabah_tokens,
+    split(lower(trim(s.name)), ' ') AS screening_tokens
+  FROM t2_omd_pv_conf.profile_sus_acc n
+  CROSS JOIN t2_omd_pv_conf.tmp_screeninglist s
 ),
 token_match AS (
-  -- hitung intersection token pengganti array_intersect
+  -- pengganti array_intersect (tidak ada di Hive)
   SELECT 
-    b.nasabah_id,
-    b.screening_id,
+    nm.customerid,
+    nm.screening_id,
     COUNT(DISTINCT token) AS intersect_count
-  FROM base b
-  LATERAL VIEW explode(b.nasabah_tokens) t AS token
-  WHERE array_contains(b.screening_tokens, token)
-  GROUP BY b.nasabah_id, b.screening_id
+  FROM normalized nm
+  LATERAL VIEW explode(nm.nasabah_tokens) t AS token
+  WHERE array_contains(nm.screening_tokens, token)
+  GROUP BY nm.customerid, nm.screening_id
 ),
 scored AS (
   SELECT
-    b.nasabah_id,
-    b.nama_nasabah,
-    b.nama_screening,
-    1 - (levenshtein(b.nasabah_sorted, b.screening_sorted) * 1.0 /
-         greatest(length(b.nasabah_sorted), length(b.screening_sorted))) AS similarity_score,
-    -- Jaccard: intersect / union, union dihitung matematis (bukan array_union)
+    nm.customerid,
+    nm.customername,
+    nm.screening_name,
+    1 - (levenshtein(nm.nasabah_sorted, nm.screening_sorted) * 1.0 /
+         greatest(length(nm.nasabah_sorted), length(nm.screening_sorted))) AS similarity_score,
+    -- Jaccard: intersect / union, union dihitung matematis (pengganti array_union)
     COALESCE(tm.intersect_count, 0) * 1.0 /
-      (size(b.nasabah_tokens) + size(b.screening_tokens) - COALESCE(tm.intersect_count, 0)) AS jaccard_score
-  FROM base b
+      (size(nm.nasabah_tokens) + size(nm.screening_tokens) - COALESCE(tm.intersect_count, 0)) AS jaccard_score
+  FROM normalized nm
   LEFT JOIN token_match tm
-    ON b.nasabah_id = tm.nasabah_id AND b.screening_id = tm.screening_id
+    ON nm.customerid = tm.customerid AND nm.screening_id = tm.screening_id
 ),
 ranked AS (
   SELECT 
     *,
     greatest(similarity_score, jaccard_score) AS best_score,
     ROW_NUMBER() OVER (
-      PARTITION BY nasabah_id 
+      PARTITION BY customerid 
       ORDER BY greatest(similarity_score, jaccard_score) DESC
     ) AS rn
   FROM scored
 )
 SELECT 
-  nasabah_id,
-  nama_nasabah,
-  nama_screening,
+  customerid,
+  customername,
+  screening_name,
   best_score
 FROM ranked
 WHERE rn = 1
