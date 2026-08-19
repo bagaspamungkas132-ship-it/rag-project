@@ -1,7 +1,8 @@
-WITH normalized AS (
+WITH base AS (
   SELECT 
     n.nasabah_id,
     n.nama_nasabah,
+    s.dataid AS screening_id,
     s.nama_screening,
     concat_ws(' ', sort_array(split(lower(trim(n.nama_nasabah)), ' '))) AS nasabah_sorted,
     concat_ws(' ', sort_array(split(lower(trim(s.nama_screening)), ' '))) AS screening_sorted,
@@ -10,16 +11,30 @@ WITH normalized AS (
   FROM nasabah n
   CROSS JOIN screening_list s
 ),
-scored AS (
+token_match AS (
+  -- hitung intersection token pengganti array_intersect
   SELECT 
-    nasabah_id,
-    nama_nasabah,
-    nama_screening,
-    1 - (levenshtein(nasabah_sorted, screening_sorted) * 1.0 / 
-         greatest(length(nasabah_sorted), length(screening_sorted))) AS similarity_score,
-    size(array_intersect(nasabah_tokens, screening_tokens)) * 1.0 / 
-         size(array_union(nasabah_tokens, screening_tokens)) AS jaccard_score
-  FROM normalized
+    b.nasabah_id,
+    b.screening_id,
+    COUNT(DISTINCT token) AS intersect_count
+  FROM base b
+  LATERAL VIEW explode(b.nasabah_tokens) t AS token
+  WHERE array_contains(b.screening_tokens, token)
+  GROUP BY b.nasabah_id, b.screening_id
+),
+scored AS (
+  SELECT
+    b.nasabah_id,
+    b.nama_nasabah,
+    b.nama_screening,
+    1 - (levenshtein(b.nasabah_sorted, b.screening_sorted) * 1.0 /
+         greatest(length(b.nasabah_sorted), length(b.screening_sorted))) AS similarity_score,
+    -- Jaccard: intersect / union, union dihitung matematis (bukan array_union)
+    COALESCE(tm.intersect_count, 0) * 1.0 /
+      (size(b.nasabah_tokens) + size(b.screening_tokens) - COALESCE(tm.intersect_count, 0)) AS jaccard_score
+  FROM base b
+  LEFT JOIN token_match tm
+    ON b.nasabah_id = tm.nasabah_id AND b.screening_id = tm.screening_id
 ),
 ranked AS (
   SELECT 
@@ -37,6 +52,6 @@ SELECT
   nama_screening,
   best_score
 FROM ranked
-WHERE rn = 1                -- hanya skor tertinggi per nasabah
-  AND best_score >= 0.85    -- hanya yang lolos cutoff
+WHERE rn = 1
+  AND best_score >= 0.85
 ORDER BY best_score DESC;
