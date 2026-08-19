@@ -1,33 +1,42 @@
-python3 -c "
-import pickle
-with open('tfidf_index/tfidf_index.pkl', 'rb') as f:
-    idx = pickle.load(f)
-print('Punya embeddings:', 'embeddings' in idx and idx['embeddings'] is not None)
-print('Total chunk:', len(idx['chunk_texts']))
-"
-
-from openai import OpenAI
-import os
-
-client = OpenAI(
-    base_url="<base_url dari config.yaml kamu>",
-    api_key=os.getenv("QWEN_API_KEY")
+WITH normalized AS (
+  SELECT 
+    n.nasabah_id,
+    n.nama_nasabah,
+    s.nama_screening,
+    concat_ws(' ', sort_array(split(lower(trim(n.nama_nasabah)), ' '))) AS nasabah_sorted,
+    concat_ws(' ', sort_array(split(lower(trim(s.nama_screening)), ' '))) AS screening_sorted,
+    split(lower(trim(n.nama_nasabah)), ' ') AS nasabah_tokens,
+    split(lower(trim(s.nama_screening)), ' ') AS screening_tokens
+  FROM nasabah n
+  CROSS JOIN screening_list s
+),
+scored AS (
+  SELECT 
+    nasabah_id,
+    nama_nasabah,
+    nama_screening,
+    1 - (levenshtein(nasabah_sorted, screening_sorted) * 1.0 / 
+         greatest(length(nasabah_sorted), length(screening_sorted))) AS similarity_score,
+    size(array_intersect(nasabah_tokens, screening_tokens)) * 1.0 / 
+         size(array_union(nasabah_tokens, screening_tokens)) AS jaccard_score
+  FROM normalized
+),
+ranked AS (
+  SELECT 
+    *,
+    greatest(similarity_score, jaccard_score) AS best_score,
+    ROW_NUMBER() OVER (
+      PARTITION BY nasabah_id 
+      ORDER BY greatest(similarity_score, jaccard_score) DESC
+    ) AS rn
+  FROM scored
 )
-models = client.models.list()
-for m in models.data:
-    print(m.id)
-
-from openai import OpenAI
-import os
-
-client = OpenAI(
-    base_url="<base_url yang sama>",
-    api_key=os.getenv("QWEN_API_KEY")
-)
-
-for model_name in ["text-embedding-v1", "text-embedding-v2", "text-embedding-v3", "Qwen/Qwen3-Embedding"]:
-    try:
-        resp = client.embeddings.create(model=model_name, input="test")
-        print(f"BERHASIL dengan model: {model_name}, dimensi: {len(resp.data[0].embedding)}")
-    except Exception as e:
-        print(f"{model_name} -> GAGAL: {e}")
+SELECT 
+  nasabah_id,
+  nama_nasabah,
+  nama_screening,
+  best_score
+FROM ranked
+WHERE rn = 1                -- hanya skor tertinggi per nasabah
+  AND best_score >= 0.85    -- hanya yang lolos cutoff
+ORDER BY best_score DESC;
