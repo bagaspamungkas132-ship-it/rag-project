@@ -1,4 +1,4 @@
-Dynamic Pricing for OCBC Funding Products
+8Dynamic Pricing for OCBC Funding Products
 5. What is the opportunity that you wish to address?
 Currently, OCBC's funding products such as Tabungan Berjangka Online and Deposito Online apply a uniform interest rate/pricing to all customers within a product tier, without accounting for real-time variations in market conditions, the bank's liquidity needs, or individual customer profiles. This differs from other industries — for instance, travel platforms like tiket.com and Traveloka display different prices for the same product based on demand, timing, and user segment. The opportunity is to apply a similar dynamic pricing approach to funding products, which tend to be easier to manage — their tenors are longer and liquidity is more predictable — allowing the bank to offer rates that are more optimal from a treasury perspective while remaining attractive to specific customers, without sacrificing product simplicity. The key constraint is that only internal OCBC customer data is available (savings balance, funding/lending history, transaction patterns), so the model needs to work within this data limitation rather than relying on external data such as competitor pricing.
 6. What is the proposed solution?
@@ -7,5 +7,17 @@ An agentic AI that analyzes internal customer data (savings balance, funding/len
 Increase revenue (cost-of-funds optimization & higher funding conversion)
 Increase operational efficiency (automated rate-setting & eligibility filtering, replacing manual work)
 Improve customer experience (more relevant, personalized offers)
+Reduce cost
+Reduce risk or compliance lapses
+
+Personalized Lead Generation Tool for Premier Banking RMs
+5. What is the opportunity that you wish to address?
+Relationship Managers (RMs) in premier/wealth banking are typically evaluated on KPIs tied to generated revenue, yet the leads they receive today are largely generic and shared across many different products — a one-size-fits-all list that doesn't account for each RM's specific domain expertise, client relationships, or the particular KPI they're currently chasing (some RMs are pushed toward metric A, others toward metric B, depending on the period or portfolio focus). Because the leads aren't tailored, RMs spend significant time filtering through irrelevant prospects or manually cross-referencing their own client knowledge against generic lists, rather than focusing their expertise on actual selling and relationship management. The target segment is OCBC's premier/wealth banking RMs, who manage client portfolios and rely heavily on CRM data for prospecting and cross-selling.
+6. What is the proposed solution?
+An agentic AI tool that allows each RM to define their own lead-generation criteria based on their domain expertise and the specific product or KPI they're targeting, rather than relying on a single centrally-generated, generic lead list. The system pulls from CRM and internal customer data, lets the RM set flexible parameters (e.g. portfolio size, product interest signals, life-stage indicators, past engagement), and generates a personalized, relevant lead list that stays aligned with the product actually being offered. After implementation, RMs no longer sift through generic, low-fit leads shared across the team — instead, each RM works from a shortlist shaped by their own expertise and current KPI priorities, increasing the relevance of every outreach and reducing wasted prospecting time.
+7. Rank the business outcomes:
+Increase revenue (more relevant leads → higher conversion for RMs)
+Increase operational efficiency (less time spent filtering generic leads)
+Improve customer experience (clients approached with more relevant, personalized offers)
 Reduce cost
 Reduce risk or compliance lapses
