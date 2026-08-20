@@ -1,6 +1,11 @@
-langchain
-langchain-community
-scikit-learn
-pdfplumber
-pyyaml
-openai
+Dynamic Pricing for OCBC Funding Products
+5. What is the opportunity that you wish to address?
+Currently, OCBC's funding products such as Tabungan Berjangka Online and Deposito Online apply a uniform interest rate/pricing to all customers within a product tier, without accounting for real-time variations in market conditions, the bank's liquidity needs, or individual customer profiles. This differs from other industries — for instance, travel platforms like tiket.com and Traveloka display different prices for the same product based on demand, timing, and user segment. The opportunity is to apply a similar dynamic pricing approach to funding products, which tend to be easier to manage — their tenors are longer and liquidity is more predictable — allowing the bank to offer rates that are more optimal from a treasury perspective while remaining attractive to specific customers, without sacrificing product simplicity. The key constraint is that only internal OCBC customer data is available (savings balance, funding/lending history, transaction patterns), so the model needs to work within this data limitation rather than relying on external data such as competitor pricing.
+6. What is the proposed solution?
+An agentic AI that analyzes internal customer data (savings balance, funding/lending history, transaction patterns) to calculate a propensity score for how likely a customer is to purchase a Tabungan Berjangka Online or Deposito Online product, then recommends a personalized rate/promo within a range pre-approved by treasury or the product owner — not fully open pricing, but controlled dynamic pricing that stays aligned with the bank's funding targets. The system also automatically filters which customers are eligible to receive dynamic rate offers, based on parameters such as balance size, cash flow stability, and tenor fit with the customer's profile. Importantly, the model includes guardrails to ensure pricing stays within risk/treasury-approved boundaries and does not result in unfair or discriminatory pricing across similar customer segments. After implementation, instead of showing the same rate to everyone, OCBC can offer more relevant rates to the right customers at the right time — improving funding conversion without having to raise rates uniformly across the entire customer base, which would increase the overall cost of funds.
+7. Rank the business outcomes:
+Increase revenue (cost-of-funds optimization & higher funding conversion)
+Increase operational efficiency (automated rate-setting & eligibility filtering, replacing manual work)
+Improve customer experience (more relevant, personalized offers)
+Reduce cost
+Reduce risk or compliance lapses
