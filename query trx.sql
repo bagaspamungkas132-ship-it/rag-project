@@ -2,8 +2,8 @@ WITH trx_in AS (
     SELECT 
         accountid,
         transaction_datetime AS in_datetime,
-        transaction_amount_idr AS in_amount,
-        ROW_NUMBER() OVER (PARTITION BY accountid ORDER BY transaction_datetime) AS in_seq
+        unix_timestamp(transaction_datetime, 'dd/MM/yyyy HH:mm:ss') AS in_ts,
+        transaction_amount_idr AS in_amount
     FROM t2_omd_pv_conf.tmp_fnsh_trx_all_fds_mdl
     WHERE direction = 'IN'
       AND transaction_status = 'SUCCESS'
@@ -12,13 +12,13 @@ trx_out AS (
     SELECT 
         accountid,
         transaction_datetime AS out_datetime,
+        unix_timestamp(transaction_datetime, 'dd/MM/yyyy HH:mm:ss') AS out_ts,
         transaction_amount_idr AS out_amount,
         counterpart_accountid
     FROM t2_omd_pv_conf.tmp_fnsh_trx_all_fds_mdl
     WHERE direction = 'OUT'
       AND transaction_status = 'SUCCESS'
 ),
--- semua OUT yang jatuh dalam window 3 jam setelah tiap IN, di hari yang sama
 in_out_window AS (
     SELECT 
         i.accountid,
@@ -30,11 +30,11 @@ in_out_window AS (
     FROM trx_in i
     JOIN trx_out o
         ON i.accountid = o.accountid
-       AND o.out_datetime > i.in_datetime
-       AND o.out_datetime <= i.in_datetime + INTERVAL '3 hours'
-       AND DATE(o.out_datetime) = DATE(i.in_datetime)
+       AND o.out_ts > i.in_ts
+       AND o.out_ts <= i.in_ts + (3 * 3600)   -- window 3 jam dalam detik
+       AND to_date(from_unixtime(o.out_ts, 'yyyy-MM-dd')) 
+           = to_date(from_unixtime(i.in_ts, 'yyyy-MM-dd'))  -- hari yang sama
 ),
--- agregasi: total OUT & jumlah counterparty per event IN
 accumulation_check AS (
     SELECT 
         accountid,
@@ -44,7 +44,7 @@ accumulation_check AS (
         COUNT(*) AS out_txn_count,
         COUNT(DISTINCT counterpart_accountid) AS distinct_out_counterparties,
         ROUND(
-            LEAST(in_amount, SUM(out_amount))::numeric 
+            LEAST(in_amount, SUM(out_amount)) 
             / NULLIF(GREATEST(in_amount, SUM(out_amount)), 0) * 100, 2
         ) AS total_similarity_pct
     FROM in_out_window
@@ -58,13 +58,14 @@ accumulation_flagged AS (
 rapid_count AS (
     SELECT 
         accountid,
-        COUNT(*) AS in_event_count,                        -- jumlah event IN yang punya OUT susulan
+        COUNT(*) AS in_event_count,
         SUM(is_accumulation_match) AS accumulation_match_count,
         SUM(out_txn_count) AS total_out_txn,
         MAX(distinct_out_counterparties) AS max_distinct_counterparties,
         MIN(in_datetime) AS first_event,
         MAX(in_datetime) AS last_event,
-        (MAX(in_datetime) - MIN(in_datetime)) AS period_span
+        (unix_timestamp(MAX(in_datetime), 'dd/MM/yyyy HH:mm:ss') 
+         - unix_timestamp(MIN(in_datetime), 'dd/MM/yyyy HH:mm:ss')) / 86400 AS period_span_days
     FROM accumulation_flagged
     GROUP BY accountid
 )
@@ -76,10 +77,10 @@ SELECT
     max_distinct_counterparties,
     first_event,
     last_event,
-    period_span,
+    period_span_days,
     CASE 
         WHEN in_event_count BETWEEN 5 AND 10
-             AND period_span BETWEEN INTERVAL '3 months' AND INTERVAL '6 months'
+             AND period_span_days BETWEEN 90 AND 183   -- ~3 s.d. 6 bulan dalam hari
              AND accumulation_match_count >= 5
         THEN 'FLAG_SAME_DAY_PASS'
         ELSE NULL
