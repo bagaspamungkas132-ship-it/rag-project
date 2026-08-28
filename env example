@@ -1,0 +1,17 @@
+# Ganti nilai di bawah dengan API key kamu, lalu rename file ini menjadi .env
+LLM_API_KEY=paste_api_key_kamu_di_sini
+
+# Base URL endpoint LLM internal
+LLM_BASE_URL=https://llmqwen14b.wssdx.apps.cml.ocbcnisp.com/v1
+
+# Nama model yang dipakai
+LLM_MODEL=Qwen/Qwen3.5-35B-A3B
+
+# Path file parquet input (data asli, TIDAK akan ditimpa)
+PARQUET_INPUT_PATH=~/parquet_output/trx_all/trx_all/data.parquet
+
+# Path file parquet output (hasil dengan kolom flag anomali)
+PARQUET_OUTPUT_PATH=~/parquet_output/trx_all/trx_all/data_with_anomali_flag.parquet
+
+# Jumlah baris per batch dikirim ke LLM sekali panggil (turunkan ke 10-15 kalau sering gagal parse)
+BATCH_SIZE=25
