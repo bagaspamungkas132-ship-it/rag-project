@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>🔥 Focus</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #05070a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .phone-frame {
+    width: 400px;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 860px;
+    background: #0d1117;
+    color: #e6edf3;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: 20px;
+    box-shadow: 0 0 0 1px #222, 0 20px 50px rgba(0,0,0,.5);
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    margin-bottom: 16px;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .add-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #e6edf3;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .add-row input[type="time"] {
+    width: 92px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 10px 8px;
+    color: #e6edf3;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .add-btn {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 10px;
+    background: #2ea043;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .add-btn:hover { background: #3fb950; }
+
+  .list { display: flex; flex-direction: column; gap: 10px; }
+
+  .task {
+    background: #161b22;
+    border-radius: 12px;
+    padding: 14px 16px;
+    border-left: 4px solid #58a6ff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .task.overdue { border-left-color: #f85149; }
+  .task.urgent { border-left-color: #d29922; }
+
+  .task-info { min-width: 0; }
+  .task-name {
+    font-weight: 600;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+
+  .task-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+  .countdown {
+    font-family: 'Consolas', monospace;
+    font-weight: 700;
+    font-size: 17px;
+    color: #58a6ff;
+  }
+  .task.urgent .countdown { color: #d29922; }
+  .task.overdue .countdown { color: #f85149; }
+
+  .del-btn {
+    background: none;
+    border: none;
+    color: #6e7681;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .del-btn:hover { color: #f85149; }
+
+  .empty {
+    text-align: center;
+    color: #6e7681;
+    font-size: 13px;
+    margin-top: 30px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="header">🔥 FOCUS</div>
+
+  <div class="add-row">
+    <input type="text" id="taskName" placeholder="Fokusin apa?">
+    <input type="time" id="taskTime">
+    <button class="add-btn" onclick="addTask()">+</button>
+  </div>
+
+  <div class="list" id="list"></div>
+  <div class="empty" id="emptyMsg">Belum ada task hari ini ✨</div>
+</div>
+
+<script>
+  const STORAGE_KEY = "focus-tasks";
+  const DAY_HARI = ["Min","Sen","Sel","Rab","Kam","Jum","Sab"];
+
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + (d.getMonth()+1) + "-" + d.getDate();
+  }
+
+  function loadTasks() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    // reset otomatis kalau beda hari
+    if (data.date !== todayStr()) {
+      localStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
+    return data.tasks;
+  }
+
+  function saveTasks(tasks) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      date: todayStr(),
+      tasks: tasks
+    }));
+  }
+
+  let tasks = loadTasks();
+
+  function addTask() {
+    const nameInput = document.getElementById("taskName");
+    const timeInput = document.getElementById("taskTime");
+    const name = nameInput.value.trim();
+    const time = timeInput.value; // "HH:MM"
+
+    if (!name || !time) return;
+
+    const [h, m] = time.split(":").map(Number);
+    const deadline = new Date();
+    deadline.setHours(h, m, 0, 0);
+
+    tasks.push({
+      id: Date.now(),
+      name: name,
+      deadline: deadline.getTime()
+    });
+
+    saveTasks(tasks);
+    nameInput.value = "";
+    timeInput.value = "";
+    render();
+  }
+
+  function removeTask(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    saveTasks(tasks);
+    render();
+  }
+
+  function formatCountdown(ms) {
+    if (ms <= 0) return "Lewat!";
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return [h, m, s].map(n => String(n).padStart(2, "0")).join(":");
+  }
+
+  function render() {
+    const list = document.getElementById("list");
+    const emptyMsg = document.getElementById("emptyMsg");
+
+    // urutkan: paling deket deadline di atas -> otomatis jadi prioritas
+    const sorted = [...tasks].sort((a, b) => a.deadline - b.deadline);
+
+    list.innerHTML = "";
+    emptyMsg.style.display = sorted.length === 0 ? "block" : "none";
+
+    const now = new Date();
+    const dayLabel = DAY_HARI[now.getDay()];
+
+    sorted.forEach(t => {
+      const remaining = t.deadline - Date.now();
+      const div = document.createElement("div");
+      div.className = "task";
+      if (remaining <= 0) div.classList.add("overdue");
+      else if (remaining < 15 * 60 * 1000) div.classList.add("urgent");
+
+      const dl = new Date(t.deadline);
+      const jam = String(dl.getHours()).padStart(2,"0") + "." + String(dl.getMinutes()).padStart(2,"0");
+
+      div.innerHTML = `
+        <div class="task-info">
+          <div class="task-name">${t.name}</div>
+          <div class="task-sub">sampai ${dayLabel} ${jam}</div>
+        </div>
+        <div class="task-right">
+          <div class="countdown">${formatCountdown(remaining)}</div>
+          <button class="del-btn" onclick="removeTask(${t.id})">✕</button>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  document.getElementById("taskName").addEventListener("keydown", e => {
+    if (e.key === "Enter") addTask();
+  });
+
+  render();
+  setInterval(render, 1000);
+</script>
+
+</body>
+</html>
