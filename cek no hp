@@ -1,3 +1,60 @@
+WITH base AS (
+  SELECT customerid, no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics
+  FROM your_table
+),
+
+procif_combined AS (
+  SELECT
+    customerid,
+    regexp_replace(
+      concat_ws('|', coalesce(no_hp_procif1,''), coalesce(no_hp_procif2,'')),
+      '[^0-9|]+', '|'
+    ) AS cleaned_procif
+  FROM base
+),
+
+procif_tokens AS (
+  SELECT customerid, token
+  FROM procif_combined
+  LATERAL VIEW OUTER explode(split(cleaned_procif, '\\|+')) t AS token
+),
+
+procif_core AS (
+  SELECT
+    customerid,
+    regexp_replace(coalesce(token,''), '^(62|0)+', '') AS token_core,
+    length(coalesce(token,'')) AS token_len,
+    coalesce(token,'') RLIKE '^0+$' AS is_all_zero          -- 🆕 deteksi placeholder all-zero
+  FROM procif_tokens
+
+  UNION ALL
+
+  SELECT
+    customerid,
+    regexp_replace(regexp_replace(coalesce(no_hp_procif1,''),'[^0-9]',''), '^(62|0)+','') AS token_core,
+    length(regexp_replace(coalesce(no_hp_procif1,''),'[^0-9]','')) AS token_len,
+    regexp_replace(coalesce(no_hp_procif1,''),'[^0-9]','') RLIKE '^0+$' AS is_all_zero   -- 🆕
+  FROM base
+
+  UNION ALL
+
+  SELECT
+    customerid,
+    regexp_replace(regexp_replace(coalesce(no_hp_procif2,''),'[^0-9]',''), '^(62|0)+','') AS token_core,
+    length(regexp_replace(coalesce(no_hp_procif2,''),'[^0-9]','')) AS token_len,
+    regexp_replace(coalesce(no_hp_procif2,''),'[^0-9]','') RLIKE '^0+$' AS is_all_zero    -- 🆕
+  FROM base
+),
+
+procif_agg AS (
+  SELECT
+    customerid,
+    collect_set(CASE WHEN token_len > 5 AND NOT is_all_zero THEN token_core END) AS procif_core_set,  -- 🆕 exclude all-zero
+    max(CASE WHEN token_len > 5 AND NOT is_all_zero THEN 1 ELSE 0 END) AS has_valid_procif             -- 🆕
+  FROM procif_core
+  GROUP BY customerid
+),
+
 norm AS (
   SELECT
     b.customerid,
@@ -5,11 +62,17 @@ norm AS (
     coalesce(p.procif_core_set, array()) AS procif_core_set,
     coalesce(p.has_valid_procif, 0) AS has_valid_procif,
     regexp_replace(regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]',''), '^(62|0)+', '') AS om_core,
-    length(regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]','')) AS om_len,
-    regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]','') RLIKE '^0+$' AS om_is_zero,        -- 🆕 kolom baru terpisah
+    CASE
+      WHEN length(regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]','')) <= 5
+        OR regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]','') RLIKE '^0+$'          -- 🆕 om all-zero juga dianggap invalid
+      THEN 0 ELSE 1
+    END AS om_valid,
     regexp_replace(regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]',''), '^(62|0)+', '') AS sics_core,
-    length(regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]','')) AS sics_len,
-    regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]','') RLIKE '^0+$' AS sics_is_zero      -- 🆕 kolom baru terpisah
+    CASE
+      WHEN length(regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]','')) <= 5
+        OR regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]','') RLIKE '^0+$'        -- 🆕 sics all-zero juga dianggap invalid
+      THEN 0 ELSE 1
+    END AS sics_valid
   FROM base b
   LEFT JOIN procif_agg p ON b.customerid = p.customerid
 ),
@@ -20,22 +83,29 @@ flagged AS (
     no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics,
 
     CASE
-      WHEN sics_len <= 5 OR sics_is_zero OR has_valid_procif = 0 THEN NULL
+      WHEN sics_valid = 0 OR has_valid_procif = 0 THEN NULL
       WHEN array_contains(procif_core_set, sics_core) THEN NULL
       ELSE 'SICS<>Pro'
     END AS flag1,
 
     CASE
-      WHEN om_len <= 5 OR om_is_zero OR sics_len <= 5 OR sics_is_zero THEN NULL
+      WHEN om_valid = 0 OR sics_valid = 0 THEN NULL
       WHEN om_core = sics_core THEN NULL
       ELSE 'OM<>SICS'
     END AS flag2,
 
     CASE
-      WHEN om_len <= 5 OR om_is_zero OR has_valid_procif = 0 THEN NULL
+      WHEN om_valid = 0 OR has_valid_procif = 0 THEN NULL
       WHEN array_contains(procif_core_set, om_core) THEN NULL
       ELSE 'OM<>Pro'
     END AS flag3
 
   FROM norm
 )
+
+SELECT
+  customerid,
+  no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics,
+  flag1, flag2, flag3,
+  NULLIF(concat_ws(', ', flag1, flag2, flag3), '') AS final_flag
+FROM flagged;
