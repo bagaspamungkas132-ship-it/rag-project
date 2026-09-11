@@ -16,15 +16,34 @@ procif_combined AS (
 procif_tokens AS (
   SELECT customerid, token
   FROM procif_combined
-  LATERAL VIEW OUTER explode(split(cleaned_procif, '\\|+')) t AS token   -- 👈 OUTER, biar row ga hilang
+  LATERAL VIEW OUTER explode(split(cleaned_procif, '\\|+')) t AS token
 ),
 
 procif_core AS (
+  -- kandidat dari hasil split (multi-nomor beneran, spt "08881318099/082137878888")
   SELECT
     customerid,
     regexp_replace(coalesce(token,''), '^(62|0)+', '') AS token_core,
     length(coalesce(token,'')) AS token_len
   FROM procif_tokens
+
+  UNION ALL
+
+  -- 🆕 TAMBAHAN: versi utuh procif1 (semua digit digabung, tanpa displit)
+  SELECT
+    customerid,
+    regexp_replace(regexp_replace(coalesce(no_hp_procif1,''),'[^0-9]',''), '^(62|0)+','') AS token_core,
+    length(regexp_replace(coalesce(no_hp_procif1,''),'[^0-9]','')) AS token_len
+  FROM base
+
+  UNION ALL
+
+  -- 🆕 TAMBAHAN: versi utuh procif2 (semua digit digabung, tanpa displit)
+  SELECT
+    customerid,
+    regexp_replace(regexp_replace(coalesce(no_hp_procif2,''),'[^0-9]',''), '^(62|0)+','') AS token_core,
+    length(regexp_replace(coalesce(no_hp_procif2,''),'[^0-9]','')) AS token_len
+  FROM base
 ),
 
 procif_agg AS (
@@ -38,7 +57,8 @@ procif_agg AS (
 
 norm AS (
   SELECT
-    b.customerid, b.no_hp_om, b.no_hp_sics,
+    b.customerid,
+    b.no_hp_procif1, b.no_hp_procif2, b.no_hp_om, b.no_hp_sics,
     coalesce(p.procif_core_set, array()) AS procif_core_set,
     coalesce(p.has_valid_procif, 0) AS has_valid_procif,
     regexp_replace(regexp_replace(coalesce(b.no_hp_om,''),'[^0-9]',''), '^(62|0)+', '') AS om_core,
@@ -46,28 +66,38 @@ norm AS (
     regexp_replace(regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]',''), '^(62|0)+', '') AS sics_core,
     length(regexp_replace(coalesce(b.no_hp_sics,''),'[^0-9]','')) AS sics_len
   FROM base b
-  LEFT JOIN procif_agg p ON b.customerid = p.customerid   -- 👈 jamin semua customerid dari base tetap ada
+  LEFT JOIN procif_agg p ON b.customerid = p.customerid
+),
+
+flagged AS (
+  SELECT
+    customerid,
+    no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics,
+
+    CASE
+      WHEN sics_len <= 5 OR has_valid_procif = 0 THEN NULL
+      WHEN array_contains(procif_core_set, sics_core) THEN NULL
+      ELSE 'SICS<>Pro'
+    END AS flag1,
+
+    CASE
+      WHEN om_len <= 5 OR sics_len <= 5 THEN NULL
+      WHEN om_core = sics_core THEN NULL
+      ELSE 'OM<>SICS'
+    END AS flag2,
+
+    CASE
+      WHEN om_len <= 5 OR has_valid_procif = 0 THEN NULL
+      WHEN array_contains(procif_core_set, om_core) THEN NULL
+      ELSE 'OM<>Pro'
+    END AS flag3
+
+  FROM norm
 )
 
 SELECT
-  customerid, no_hp_om, no_hp_sics,
-
-  CASE
-    WHEN sics_len <= 5 OR has_valid_procif = 0 THEN NULL
-    WHEN array_contains(procif_core_set, sics_core) THEN NULL
-    ELSE 'SICS<>Pro'
-  END AS flag1,
-
-  CASE
-    WHEN om_len <= 5 OR sics_len <= 5 THEN NULL
-    WHEN om_core = sics_core THEN NULL
-    ELSE 'OM<>SICS'
-  END AS flag2,
-
-  CASE
-    WHEN om_len <= 5 OR has_valid_procif = 0 THEN NULL
-    WHEN array_contains(procif_core_set, om_core) THEN NULL
-    ELSE 'OM<>Pro'
-  END AS flag3
-
-FROM norm;
+  customerid,
+  no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics,
+  flag1, flag2, flag3,
+  NULLIF(concat_ws(', ', flag1, flag2, flag3), '') AS final_flag
+FROM flagged;
