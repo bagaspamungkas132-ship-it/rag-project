@@ -1,0 +1,78 @@
+WITH base AS (
+  SELECT customerid, no_hp_procif1, no_hp_procif2, no_hp_om, no_hp_sics
+  FROM your_table
+),
+
+-- gabung procif1 + procif2 jadi satu string, delimiter apapun jadi "|"
+procif_combined AS (
+  SELECT
+    customerid, no_hp_om, no_hp_sics,
+    regexp_replace(
+      concat_ws('|', coalesce(no_hp_procif1,''), coalesce(no_hp_procif2,'')),
+      '[^0-9|]+', '|'
+    ) AS cleaned_procif
+  FROM base
+),
+
+-- pecah jadi token individual
+procif_tokens AS (
+  SELECT customerid, no_hp_om, no_hp_sics, token
+  FROM procif_combined
+  LATERAL VIEW explode(split(cleaned_procif, '\\|+')) t AS token
+  WHERE token != ''
+),
+
+-- strip prefix 62/0 berulang + tandai token yang panjangnya valid (>5 digit)
+procif_core AS (
+  SELECT
+    customerid, no_hp_om, no_hp_sics,
+    regexp_replace(token, '^(62|0)+', '') AS token_core,
+    length(token) AS token_len
+  FROM procif_tokens
+),
+
+-- kumpulkan semua core token procif per customer (hanya yang >5 digit)
+procif_agg AS (
+  SELECT
+    customerid,
+    max(no_hp_om) AS no_hp_om,
+    max(no_hp_sics) AS no_hp_sics,
+    collect_set(CASE WHEN token_len > 5 THEN token_core END) AS procif_core_set,
+    max(CASE WHEN token_len > 5 THEN 1 ELSE 0 END) AS has_valid_procif
+  FROM procif_core
+  GROUP BY customerid
+),
+
+-- normalisasi om & sics jadi core juga
+norm AS (
+  SELECT
+    customerid, no_hp_om, no_hp_sics, procif_core_set, has_valid_procif,
+    regexp_replace(regexp_replace(coalesce(no_hp_om,''),'[^0-9]',''), '^(62|0)+', '') AS om_core,
+    length(regexp_replace(coalesce(no_hp_om,''),'[^0-9]','')) AS om_len,
+    regexp_replace(regexp_replace(coalesce(no_hp_sics,''),'[^0-9]',''), '^(62|0)+', '') AS sics_core,
+    length(regexp_replace(coalesce(no_hp_sics,''),'[^0-9]','')) AS sics_len
+  FROM procif_agg
+)
+
+SELECT
+  customerid, no_hp_om, no_hp_sics,
+
+  CASE
+    WHEN sics_len <= 5 OR has_valid_procif = 0 THEN NULL
+    WHEN array_contains(procif_core_set, sics_core) THEN NULL
+    ELSE 'SICS<>Pro'
+  END AS flag1,
+
+  CASE
+    WHEN om_len <= 5 OR sics_len <= 5 THEN NULL
+    WHEN om_core = sics_core THEN NULL
+    ELSE 'OM<>SICS'
+  END AS flag2,
+
+  CASE
+    WHEN om_len <= 5 OR has_valid_procif = 0 THEN NULL
+    WHEN array_contains(procif_core_set, om_core) THEN NULL
+    ELSE 'OM<>Pro'
+  END AS flag3
+
+FROM norm;
