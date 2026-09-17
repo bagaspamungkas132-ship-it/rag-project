@@ -16,6 +16,14 @@ Cara pakai:
 # %% ------------------------------------------------------------------
 # 0. IMPORT & CONFIG
 # ------------------------------------------------------------------
+import os
+os.environ["MPLBACKEND"] = "Agg"  # override SEBELUM matplotlib di-import, krn matplotlib
+                                    # baca env var ini langsung di __init__.py-nya
+
+# folder output: pakai folder relatif terhadap lokasi script ini, dan auto-dibuat
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 import pandas as pd
 import numpy as np
 from scipy.stats import pointbiserialr
@@ -117,7 +125,7 @@ sns.barplot(data=corr_df, x="corr", y="feature",
 plt.axvline(0, color="black", linewidth=0.8)
 plt.title("Korelasi fitur terhadap target Suspicious (point-biserial)")
 plt.tight_layout()
-plt.savefig("/home/claude/corr_to_target.png", dpi=150)
+plt.savefig(os.path.join(OUTPUT_DIR, "corr_to_target.png"), dpi=150)
 plt.close()
 
 # %% ------------------------------------------------------------------
@@ -130,7 +138,7 @@ plt.figure(figsize=(10, 8))
 sns.heatmap(corr_matrix, cmap="coolwarm", center=0, annot=False)
 plt.title("Korelasi antar fitur (cek redundansi)")
 plt.tight_layout()
-plt.savefig("/home/claude/corr_matrix_features.png", dpi=150)
+plt.savefig(os.path.join(OUTPUT_DIR, "corr_matrix_features.png"), dpi=150)
 plt.close()
 
 # pasangan fitur dengan korelasi tinggi (>|0.85|) -> kandidat drop salah satu
@@ -151,11 +159,19 @@ for a, b, v in high_corr_pairs:
 #    contoh: train = Jan-Apr 2026, test = Mei-Jun 2026
 # ------------------------------------------------------------------
 df_fds[TIME_COL] = df_fds[TIME_COL].astype(str)
+print("Contoh nilai unik alert_month:", sorted(df_fds[TIME_COL].unique())[:15])
 train_months = ["2026-01", "2026-02", "2026-03", "2026-04"]
 test_months = ["2026-05", "2026-06"]
 
-train_df = df_fds[df_fds[TIME_COL].isin(train_months)].copy()
-test_df = df_fds[df_fds[TIME_COL].isin(test_months)].copy()
+train_df = df_fds[df_fds[TIME_COL].str.startswith(tuple(train_months))].copy()
+test_df = df_fds[df_fds[TIME_COL].str.startswith(tuple(test_months))].copy()
+
+if len(train_df) == 0 or len(test_df) == 0:
+    raise ValueError(
+        f"Train/test kosong! Cek format alert_month di atas (Contoh nilai unik), "
+        f"lalu sesuaikan train_months/test_months. "
+        f"len(train_df)={len(train_df)}, len(test_df)={len(test_df)}"
+    )
 
 X_train = train_df[feature_cols].apply(pd.to_numeric, errors="coerce")
 y_train = train_df["target"]
@@ -245,7 +261,7 @@ fig, ax = plt.subplots(1, 2, figsize=(11, 4.5))
 RocCurveDisplay.from_predictions(y_test, best_proba, ax=ax[0])
 PrecisionRecallDisplay.from_predictions(y_test, best_proba, ax=ax[1])
 plt.tight_layout()
-plt.savefig("/home/claude/model_eval_curves.png", dpi=150)
+plt.savefig(os.path.join(OUTPUT_DIR, "model_eval_curves.png"), dpi=150)
 plt.close()
 
 # %% ------------------------------------------------------------------
@@ -256,7 +272,6 @@ scored["score_suspicious"] = best_proba
 scored = scored.sort_values("score_suspicious", ascending=False)
 print(scored.head(20))
 
-scored.to_csv("/home/claude/scored_output.csv", index=False)
+scored.to_csv(os.path.join(OUTPUT_DIR, "scored_output.csv"), index=False)
 
-print("Selesai. Output tersimpan: corr_to_target.png, corr_matrix_features.png, "
-      "model_eval_curves.png, scored_output.csv")
+print(f"Selesai. Output tersimpan di folder: {OUTPUT_DIR}")
