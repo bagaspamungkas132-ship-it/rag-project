@@ -8,6 +8,17 @@
 --   walau cuma buat "coba-coba" -- sekali kebiasaan itu masuk, gampang lolos
 --   ke versi final tanpa sadar.
 --
+-- CATATAN PENTING SOAL BLANK vs NULL:
+--   Ditemukan bug: counterpart_accountid punya baris dengan STRING KOSONG ('')
+--   yang BUKAN NULL -- filter "IS NOT NULL" saja tidak menyaring ini, sehingga
+--   semua baris kosong ke-treat sebagai "1 counterparty" yang sama, bikin
+--   COUNT(DISTINCT ...) meledak (ratusan ribu). Semua filter di bawah sekarang
+--   pakai "IS NOT NULL AND TRIM(...) <> ''" -- kalau kamu nambah query/kolom
+--   string baru dari tabel ini, SELALU cek dulu apakah ada pola blank serupa
+--   sebelum pakai COUNT DISTINCT/GROUP BY di kolom itu:
+--     SELECT COUNT(*) FROM <tabel> WHERE TRIM(<kolom>) = '' AND <kolom> IS NOT NULL;
+--   Kalau hasilnya > 0, terapkan filter yang sama ke kolom itu.
+--
 -- CATATAN PERFORMANCE: tabel transaksi mentah biasanya BESAR. Kalau ada kolom
 -- partition (terlihat ada `partition_date` di tabelmu), tambahkan filter
 -- partition_date di WHERE clause supaya query tidak full-scan semua histori.
@@ -59,8 +70,8 @@ SELECT
     MAX(transaction_amount_idr)                                                AS max_amount_l3m,
     SUM(CASE WHEN direction = 'OUT' THEN transaction_amount_idr ELSE 0 END)    AS total_amount_out_l3m,
     SUM(CASE WHEN direction = 'IN'  THEN transaction_amount_idr ELSE 0 END)    AS total_amount_in_l3m,
-    COUNT(DISTINCT counterpart_accountid)                                      AS n_unique_counterparty_l3m,
-    COUNT(DISTINCT counterpart_bank)                                          AS n_unique_bank_l3m,
+    COUNT(DISTINCT CASE WHEN TRIM(counterpart_accountid) <> '' THEN counterpart_accountid END) AS n_unique_counterparty_l3m,
+    COUNT(DISTINCT CASE WHEN TRIM(counterpart_bank) <> '' THEN counterpart_bank END)           AS n_unique_bank_l3m,
     COUNT(DISTINCT event_type)                                                 AS n_channel_l3m,
     SUM(CASE WHEN transaction_status <> 'SUCCESS' THEN 1 ELSE 0 END)          AS n_failed_trx_l3m,
     SUM(CASE WHEN HOUR(transaction_datetime) < 6
@@ -93,6 +104,7 @@ SELECT
 FROM t2_omd_pv_conf.trx_model_backtesting_daily_v2
 WHERE direction = 'OUT'
   AND counterpart_accountid IS NOT NULL
+  AND TRIM(counterpart_accountid) <> ''
 GROUP BY counterpart_accountid, date_format(activity_date, 'yyyy-MM');
 
 -- 2b. Join ke tiap alert: dari semua counterparty yang dipakai akun ini di window
@@ -114,6 +126,7 @@ WITH trx_window AS (
      AND t.activity_date <  a.alert_month
      AND t.direction = 'OUT'
      AND t.counterpart_accountid IS NOT NULL
+     AND TRIM(t.counterpart_accountid) <> ''
 )
 SELECT
     tw.key1,
